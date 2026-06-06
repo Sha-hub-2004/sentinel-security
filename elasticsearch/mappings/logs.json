@@ -1,0 +1,14 @@
+{
+  "index_patterns": ["sentinel-logs-*"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "id": { "type": "integer" },
+        "service_name": { "type": "keyword" },
+        "log_level": { "type": "keyword" },
+        "message": { "type": "text" }
+      }
+    }
+  }
+}

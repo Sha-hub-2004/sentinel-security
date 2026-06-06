@@ -1,0 +1,25 @@
+{
+  "index_patterns": ["sentinel-metrics-*"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "type": { "type": "keyword" },
+        "id": { "type": "integer" },
+        "service_name": { "type": "keyword" },
+        "url": { "type": "keyword" },
+        "status_code": { "type": "integer" },
+        "response_time_ms": { "type": "float" },
+        "queue_name": { "type": "keyword" },
+        "total_messages": { "type": "integer" },
+        "consumers": { "type": "integer" },
+        "unacked_messages": { "type": "integer" },
+        "host_name": { "type": "keyword" },
+        "ip_address": { "type": "ip" },
+        "cpu_usage_pct": { "type": "float" },
+        "memory_usage_pct": { "type": "float" },
+        "disk_usage_pct": { "type": "float" }
+      }
+    }
+  }
+}

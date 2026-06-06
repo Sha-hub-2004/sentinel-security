@@ -1,0 +1,17 @@
+{
+  "index_patterns": ["sentinel-alerts-*"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "id": { "type": "integer" },
+        "source": { "type": "keyword" },
+        "severity": { "type": "keyword" },
+        "title": { "type": "keyword" },
+        "description": { "type": "text" },
+        "resolved": { "type": "boolean" },
+        "correlated_incident_id": { "type": "integer" }
+      }
+    }
+  }
+}

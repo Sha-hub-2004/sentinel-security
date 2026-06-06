@@ -1,0 +1,17 @@
+{
+  "index_patterns": ["sentinel-anomalies-*"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "id": { "type": "integer" },
+        "source": { "type": "keyword" },
+        "metric_name": { "type": "keyword" },
+        "metric_value": { "type": "float" },
+        "detection_method": { "type": "keyword" },
+        "score": { "type": "float" },
+        "description": { "type": "text" }
+      }
+    }
+  }
+}
