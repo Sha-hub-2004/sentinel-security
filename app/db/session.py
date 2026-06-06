@@ -12,12 +12,20 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-engine: AsyncEngine = create_async_engine(db_url, echo=False, future=True)
+# Dynamically set connection arguments (disable prepared statements for PgBouncer/Supavisor poolers)
+connect_args = {}
+if "postgresql" in db_url:
+    connect_args["statement_cache_size"] = 0
+
+engine: AsyncEngine = create_async_engine(db_url, echo=False, future=True, connect_args=connect_args)
 async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 
 async def init_db() -> None:
+    # Explicitly import all models to register them in SQLModel metadata before creating tables
+    from app.models import ApiHealth, QueueMetrics, ServerHealth, SystemLog, Alert, User, Anomaly, AlertCorrelation
+
     async with engine.begin() as conn:
         # Create tables if they do not exist
         await conn.run_sync(SQLModel.metadata.create_all)
