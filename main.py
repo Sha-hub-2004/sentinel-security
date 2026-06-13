@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from app.api.ingest import router as ingest_router
 from app.api.publish import router as publish_router
 from app.api.alerts import router as alerts_router
@@ -22,7 +22,6 @@ def create_app() -> FastAPI:
     @app.get("/metrics", tags=["metrics"])
     def metrics() -> Response:
         """Prometheus metrics scrape endpoint."""
-        from fastapi import Response
         from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
         from app.core.metrics import REGISTRY
         return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
