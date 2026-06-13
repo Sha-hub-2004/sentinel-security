@@ -1,7 +1,7 @@
-from prometheus_client import Counter, Registry
+from prometheus_client import Counter, CollectorRegistry
 
 # Standard Prometheus metrics registry
-REGISTRY = Registry()
+REGISTRY = CollectorRegistry()
 
 INGEST_REQUESTS_TOTAL = Counter(
     "sentinel_ingest_requests_total",
