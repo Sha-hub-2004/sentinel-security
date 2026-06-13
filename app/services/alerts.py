@@ -133,6 +133,13 @@ async def evaluate_metric(source: str, data: Dict[str, Any], session: AsyncSessi
             await session.commit()
             await session.refresh(policy_alert_obj)
             logger.warning(f"🚨 ALERT TRIGGERED [{severity}]: {title} - {description}")
+            
+            try:
+                from app.core.metrics import ALERTS_TRIGGERED_TOTAL
+                ALERTS_TRIGGERED_TOTAL.labels(source=source, severity=severity).inc()
+            except Exception:
+                pass
+
             await dispatch_notifications(policy_alert_obj)
             try:
                 import asyncio
@@ -140,6 +147,12 @@ async def evaluate_metric(source: str, data: Dict[str, Any], session: AsyncSessi
                 asyncio.create_task(send_to_elasticsearch("alerts", policy_alert_obj.dict()))
             except Exception:
                 pass
+            
+            try:
+                from app.services.correlation import correlate_new_alert
+                await correlate_new_alert(policy_alert_obj, session)
+            except Exception:
+                logger.exception("Failed to correlate policy alert")
 
         # Run anomaly detection
         try:
@@ -169,6 +182,13 @@ async def evaluate_metric(source: str, data: Dict[str, Any], session: AsyncSessi
                     await session.commit()
                     await session.refresh(anomaly_alert)
                     logger.warning(f"🚨 ANOMALY ALERT TRIGGERED [{anomaly_severity}]: {anomaly_alert.title} - {anomaly_alert.description}")
+                    
+                    try:
+                        from app.core.metrics import ALERTS_TRIGGERED_TOTAL
+                        ALERTS_TRIGGERED_TOTAL.labels(source=source, severity=anomaly_severity).inc()
+                    except Exception:
+                        pass
+
                     await dispatch_notifications(anomaly_alert)
                     try:
                         import asyncio
@@ -176,6 +196,12 @@ async def evaluate_metric(source: str, data: Dict[str, Any], session: AsyncSessi
                         asyncio.create_task(send_to_elasticsearch("alerts", anomaly_alert.dict()))
                     except Exception:
                         pass
+                    
+                    try:
+                        from app.services.correlation import correlate_new_alert
+                        await correlate_new_alert(anomaly_alert, session)
+                    except Exception:
+                        logger.exception("Failed to correlate anomaly alert")
         except Exception:
             logger.exception("Failed to run anomaly detection during metric evaluation")
 

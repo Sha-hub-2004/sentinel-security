@@ -6,6 +6,10 @@ from sqlalchemy import create_engine, text
 from datetime import datetime
 import time
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 # Set up page configurations
 st.set_page_config(
@@ -99,6 +103,22 @@ st.markdown("""
         background: rgba(16, 185, 129, 0.1);
     }
 
+    /* Custom Correlation colors */
+    .corr-critical {
+        border-left: 6px solid #ef4444;
+        background: rgba(239, 68, 68, 0.15);
+    }
+    
+    .corr-medium {
+        border-left: 6px solid #f59e0b;
+        background: rgba(245, 158, 11, 0.15);
+    }
+    
+    .corr-low {
+        border-left: 6px solid #10b981;
+        background: rgba(16, 185, 129, 0.15);
+    }
+
     /* Log line output */
     .log-box {
         font-family: 'JetBrains Mono', monospace;
@@ -143,6 +163,28 @@ def resolve_alert_in_db(alert_id: int):
         return False
 
 
+def resolve_correlation_in_db(correlation_id: int, alert_ids_str: str):
+    try:
+        with engine.begin() as conn:
+            # Mark correlation as resolved
+            conn.execute(
+                text("UPDATE alertcorrelation SET resolved = 1 WHERE id = :id"),
+                {"id": correlation_id}
+            )
+            # Resolve all linked alerts
+            if alert_ids_str:
+                alert_ids = [int(aid.strip()) for aid in alert_ids_str.split(",") if aid.strip()]
+                for aid in alert_ids:
+                    conn.execute(
+                        text("UPDATE alert SET resolved = 1 WHERE id = :id"),
+                        {"id": aid}
+                    )
+        return True
+    except Exception as exc:
+        st.error(f"Failed to update correlation and alerts: {exc}")
+        return False
+
+
 # Title & Control Bar
 st.markdown("<div class='dashboard-title'>🛡️ SENTINEL PLATFORM</div>", unsafe_allow_html=True)
 st.markdown("<div class='dashboard-subtitle'>Autonomous Real-time Security Ingestion, Telemetry, and AI-Engine Anomaly Monitor</div>", unsafe_allow_html=True)
@@ -158,12 +200,18 @@ df_api = get_table_data("SELECT * FROM apihealth")
 df_queue = get_table_data("SELECT * FROM queuemetrics")
 df_server = get_table_data("SELECT * FROM serverhealth")
 df_logs = get_table_data("SELECT * FROM systemlog")
+df_correlations = get_table_data("SELECT * FROM alertcorrelation")
+df_anomalies = get_table_data("SELECT * FROM anomaly")
 
 # Metric cards calculations
 active_alerts_count = len(df_alerts[df_alerts['resolved'] == 0]) if not df_alerts.empty else 0
 total_alerts_count = len(df_alerts) if not df_alerts.empty else 0
 avg_api_latency = df_api['response_time_ms'].mean() if not df_api.empty else 0.0
-total_events_ingested = len(df_alerts) + len(df_api) + len(df_queue) + len(df_server) + len(df_logs)
+total_events_ingested = (
+    len(df_alerts) + len(df_api) + len(df_queue) + len(df_server) + len(df_logs) +
+    (len(df_correlations) if not df_correlations.empty else 0) +
+    (len(df_anomalies) if not df_anomalies.empty else 0)
+)
 
 # 4 Column Metric Cards Layout
 m1, m2, m3, m4 = st.columns(4)
@@ -209,9 +257,11 @@ with m4:
 st.markdown("<hr style='border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 2rem 0;' />", unsafe_allow_html=True)
 
 # Main Navigation Tabs
-tab_overview, tab_alerts, tab_telemetry, tab_logs = st.tabs([
+tab_overview, tab_alerts, tab_correlations, tab_anomalies, tab_telemetry, tab_logs = st.tabs([
     "📈 System Dashboard", 
     "🚨 Security Alert Center", 
+    "🛡️ Correlated Incidents",
+    "🤖 AI Anomaly Monitor",
     "📊 Hardware & API Telemetry", 
     "📋 Service Logs Explorer"
 ])
@@ -342,7 +392,121 @@ with tab_alerts:
         st.success("Perfect. No security incidents recorded in the database.")
 
 # -----------------
-# TAB 3: TELEMETRY ANALYTICS
+# TAB 3: CORRELATED INCIDENTS
+# -----------------
+with tab_correlations:
+    st.markdown("### 🛡️ Enterprise Threat Incident Correlation Monitor")
+    st.markdown("This section displays high-priority security incidents aggregated by Sentinel's Heuristic Correlation Engine.")
+    
+    corr_filter = st.selectbox("Incident Status Filter", ["Active Incidents Only", "Resolved Incidents Only", "All Incidents"])
+    
+    if not df_correlations.empty:
+        # Apply filter
+        if corr_filter == "Active Incidents Only":
+            filtered_corr = df_correlations[df_correlations['resolved'] == 0]
+        elif corr_filter == "Resolved Incidents Only":
+            filtered_corr = df_correlations[df_correlations['resolved'] == 1]
+        else:
+            filtered_corr = df_correlations
+            
+        # Sort by threat score descending, then timestamp descending
+        filtered_corr = filtered_corr.sort_values(by=['threat_score', 'timestamp'], ascending=[False, False])
+        
+        if filtered_corr.empty:
+            st.success("No security incidents found matching this filter.")
+        else:
+            for idx, row in filtered_corr.iterrows():
+                score = row['threat_score']
+                status_color = "#ef4444" if score >= 60 else "#f59e0b" if score >= 30 else "#10b981"
+                card_style = "corr-critical" if score >= 60 else "corr-medium" if score >= 30 else "corr-low"
+                
+                col_corr, col_corr_action = st.columns([5, 1])
+                with col_corr:
+                    st.markdown(f"""
+                    <div class="glass-card {card_style}">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.85rem; font-weight: bold; color: {status_color}; text-transform: uppercase;">
+                                Threat Score: {score:.1f}/100
+                            </span>
+                            <span style="font-size: 0.8rem; color: #64748b;">
+                                Incident #{row['id']}
+                            </span>
+                        </div>
+                        <h4 style="margin: 0 0 10px 0;">{row['incident_name']}</h4>
+                        <p style="color: #cbd5e1; font-size: 0.95rem; margin-bottom: 10px; line-height: 1.4;">{row['description']}</p>
+                        <div style="font-size: 0.8rem; color: #94a3b8; display: flex; gap: 20px;">
+                            <span>🕒 {row['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC')}</span>
+                            <span>🚨 Linked Alert IDs: <code>{row['alert_ids']}</code></span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col_corr_action:
+                    st.write("")
+                    st.write("")
+                    if row['resolved'] == 0:
+                        btn_key = f"resolve_corr_{row['id']}"
+                        if st.button("Resolve Incident ✅", key=btn_key, use_container_width=True):
+                            if resolve_correlation_in_db(row['id'], row['alert_ids']):
+                                st.toast(f"Incident #{row['id']} and linked alerts resolved!", icon="✅")
+                                time.sleep(1)
+                                st.rerun()
+                    else:
+                        st.markdown("<div style='color: #10b981; font-weight: bold; text-align: center; margin-top: 15px;'>Resolved ✓</div>", unsafe_allow_html=True)
+    else:
+        st.success("No incident correlations found in database. All systems normal.")
+
+# -----------------
+# TAB 4: AI ANOMALY MONITOR
+# -----------------
+with tab_anomalies:
+    st.markdown("### 🤖 Autonomous Machine Learning Anomaly Detection")
+    st.markdown("Sentinel monitors live API check latency, server metrics, and queue backlogs using Z-Score, Moving Average, and Isolation Forest detection.")
+    
+    if not df_anomalies.empty:
+        col_anom_left, col_anom_right = st.columns([1, 2])
+        
+        with col_anom_left:
+            st.markdown("#### Anomaly Metrics Summary")
+            # Group by method
+            method_counts = df_anomalies.groupby('detection_method').size().reset_index(name='Count')
+            st.dataframe(method_counts, use_container_width=True, hide_index=True)
+            
+            # Group by source
+            source_counts = df_anomalies.groupby('source').size().reset_index(name='Count')
+            st.dataframe(source_counts, use_container_width=True, hide_index=True)
+            
+        with col_anom_right:
+            st.markdown("#### Anomalies Trend over Time")
+            fig_anom = px.scatter(
+                df_anomalies, x='timestamp', y='score',
+                color='detection_method', hover_data=['source', 'metric_name', 'metric_value', 'description'],
+                title="Telemetry Anomaly Score Profile",
+                labels={'score': 'Anomaly Score', 'timestamp': 'Time'}
+            )
+            fig_anom.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color='#e2e8f0',
+                margin=dict(l=0, r=0, t=40, b=0)
+            )
+            st.plotly_chart(fig_anom, use_container_width=True)
+            
+        st.markdown("<br/>", unsafe_allow_html=True)
+        st.markdown("#### Live Anomalies Log")
+        
+        df_anom_display = df_anomalies.sort_values(by='timestamp', ascending=False).copy()
+        df_anom_display['timestamp'] = df_anom_display['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        st.dataframe(
+            df_anom_display[['timestamp', 'source', 'metric_name', 'metric_value', 'detection_method', 'score', 'description']],
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No anomalies recorded in the database. Run telemetry simulation to stream live data.")
+
+# -----------------
+# TAB 5: TELEMETRY ANALYTICS
 # -----------------
 with tab_telemetry:
     st.markdown("### Deep Hardware Metrics & API Latency Telemetry")

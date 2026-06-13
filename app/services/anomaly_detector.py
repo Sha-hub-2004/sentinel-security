@@ -178,6 +178,12 @@ async def evaluate_anomalies(
             session.add(anomaly_obj)
             detected_anomalies.append(anomaly_obj)
             logger.warning(desc)
+            
+            try:
+                from app.core.metrics import ANOMALIES_DETECTED_TOTAL
+                ANOMALIES_DETECTED_TOTAL.labels(source=source, detection_method="Z-Score").inc()
+            except Exception:
+                pass
 
         # 2. Isolation Forest detection (Multivariate anomaly detection helper)
         ifforest_anomaly, if_score = detect_isolation_forest_anomaly(current_val, history)
@@ -196,6 +202,12 @@ async def evaluate_anomalies(
             detected_anomalies.append(anomaly_obj)
             logger.warning(desc)
 
+            try:
+                from app.core.metrics import ANOMALIES_DETECTED_TOTAL
+                ANOMALIES_DETECTED_TOTAL.labels(source=source, detection_method="Isolation Forest").inc()
+            except Exception:
+                pass
+
         # 3. Moving Average detection (Detect sudden volatility shifts)
         ma_anomaly, ma_score = detect_moving_average_anomaly(current_val, history)
         if ma_anomaly:
@@ -212,6 +224,12 @@ async def evaluate_anomalies(
             session.add(anomaly_obj)
             detected_anomalies.append(anomaly_obj)
             logger.warning(desc)
+
+            try:
+                from app.core.metrics import ANOMALIES_DETECTED_TOTAL
+                ANOMALIES_DETECTED_TOTAL.labels(source=source, detection_method="Moving Average").inc()
+            except Exception:
+                pass
             
     if detected_anomalies:
         await session.commit()

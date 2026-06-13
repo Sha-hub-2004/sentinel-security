@@ -11,10 +11,12 @@ from app.schemas import (
 )
 from app.db.session import get_session
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.models import ApiHealth, QueueMetrics, ServerHealth, SystemLog
+from app.models import ApiHealth, QueueMetrics, ServerHealth, SystemLog, User
 from app.logger import get_logger
 from app.services.rabbitmq import publish_message
 from app.services.elasticsearch_client import send_to_elasticsearch
+from app.core.security import RoleChecker
+from app.core.metrics import INGEST_REQUESTS_TOTAL
 import asyncio
 from datetime import datetime
 
@@ -24,7 +26,10 @@ logger = get_logger("ingest")
 
 @router.post("/api_health", response_model=ApiHealthRead)
 async def ingest_api_health(
-    payload: ApiHealthCreate, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)
+    payload: ApiHealthCreate,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(RoleChecker(["Admin"])),
 ):
     try:
         obj = ApiHealth(
@@ -47,15 +52,20 @@ async def ingest_api_health(
             # Fallback: publish will run on request loop if available; otherwise ignore.
             logger.debug("Could not schedule async publish (no running loop)")
 
+        INGEST_REQUESTS_TOTAL.labels(endpoint="api_health", status="success").inc()
         return obj
     except Exception as exc:
+        INGEST_REQUESTS_TOTAL.labels(endpoint="api_health", status="error").inc()
         logger.exception("Failed to ingest api health")
         raise HTTPException(status_code=500, detail="ingest failed") from exc
 
 
 @router.post("/queue_metrics", response_model=QueueMetricsRead)
 async def ingest_queue_metrics(
-    payload: QueueMetricsCreate, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)
+    payload: QueueMetricsCreate,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(RoleChecker(["Admin"])),
 ):
     try:
         obj = QueueMetrics(
@@ -75,15 +85,20 @@ async def ingest_queue_metrics(
         except RuntimeError:
             logger.debug("Could not schedule async publish (no running loop)")
 
+        INGEST_REQUESTS_TOTAL.labels(endpoint="queue_metrics", status="success").inc()
         return obj
     except Exception:
+        INGEST_REQUESTS_TOTAL.labels(endpoint="queue_metrics", status="error").inc()
         logger.exception("Failed to ingest queue metrics")
         raise HTTPException(status_code=500, detail="ingest failed")
 
 
 @router.post("/server_health", response_model=ServerHealthRead)
 async def ingest_server_health(
-    payload: ServerHealthCreate, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)
+    payload: ServerHealthCreate,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(RoleChecker(["Admin"])),
 ):
     try:
         obj = ServerHealth(
@@ -104,15 +119,20 @@ async def ingest_server_health(
         except RuntimeError:
             logger.debug("Could not schedule async publish (no running loop)")
 
+        INGEST_REQUESTS_TOTAL.labels(endpoint="server_health", status="success").inc()
         return obj
     except Exception:
+        INGEST_REQUESTS_TOTAL.labels(endpoint="server_health", status="error").inc()
         logger.exception("Failed to ingest server health")
         raise HTTPException(status_code=500, detail="ingest failed")
 
 
 @router.post("/system_log", response_model=SystemLogRead)
 async def ingest_system_log(
-    payload: SystemLogCreate, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)
+    payload: SystemLogCreate,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(RoleChecker(["Admin"])),
 ):
     try:
         obj = SystemLog(
@@ -131,8 +151,10 @@ async def ingest_system_log(
         except RuntimeError:
             logger.debug("Could not schedule async publish (no running loop)")
 
+        INGEST_REQUESTS_TOTAL.labels(endpoint="system_log", status="success").inc()
         return obj
     except Exception:
+        INGEST_REQUESTS_TOTAL.labels(endpoint="system_log", status="error").inc()
         logger.exception("Failed to ingest system log")
         raise HTTPException(status_code=500, detail="ingest failed")
 

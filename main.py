@@ -19,6 +19,14 @@ def create_app() -> FastAPI:
         """Standard health check endpoint for load balancers and container probes."""
         return {"status": "healthy"}
 
+    @app.get("/metrics", tags=["metrics"])
+    def metrics() -> Response:
+        """Prometheus metrics scrape endpoint."""
+        from fastapi import Response
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        from app.core.metrics import REGISTRY
+        return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
+
 
     @app.on_event("startup")
     async def startup_event() -> None:

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from app.schemas import PublishRequest, PublishResponse
 from app.services.rabbitmq import publish_message
 from app.logger import get_logger
+from app.models import User
+from app.core.security import RoleChecker
 import asyncio
 
 router = APIRouter()
@@ -9,7 +11,11 @@ logger = get_logger("publish")
 
 
 @router.post("/", response_model=PublishResponse)
-async def publish_message_endpoint(req: PublishRequest, background_tasks: BackgroundTasks):
+async def publish_message_endpoint(
+    req: PublishRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(RoleChecker(["Admin"])),
+):
     """Public endpoint to publish arbitrary JSON payloads to the monitoring exchange.
 
     Note: This endpoint queues an async publish and returns immediately.

@@ -15,12 +15,40 @@ print("Press Ctrl+C to terminate the simulator.\n")
 
 client = httpx.Client(timeout=5.0)
 
+def authenticate():
+    auth_url = "http://localhost:8000/auth/login"
+    print("🔑 Authenticating as admin...")
+    while True:
+        try:
+            res = client.post(auth_url, data={"username": "admin", "password": "admin123"})
+            if res.status_code == 200:
+                token = res.json()["access_token"]
+                client.headers.update({"Authorization": f"Bearer {token}"})
+                print("🔑 Authentication successful! Token cached.")
+                break
+            else:
+                print(f"🔑 Authentication failed ({res.status_code}): {res.text}. Retrying in 5s...")
+        except Exception as e:
+            print(f"🔑 Authentication connection error: {e}. Retrying in 5s...")
+        time.sleep(5)
+
+authenticate()
+
 def post_metric(endpoint: str, payload: dict):
     url = f"{API_BASE_URL}/{endpoint}"
     try:
         res = client.post(url, json=payload)
         if res.status_code in [200, 201]:
             print(f"  [Ingest Success] Posted to {endpoint}: {payload.get('service_name') or payload.get('queue_name') or payload.get('host_name')}")
+        elif res.status_code == 401:
+            print("  ❌ [Ingest Failure] Unauthorized (token expired). Re-authenticating...")
+            authenticate()
+            # Retry post
+            res = client.post(url, json=payload)
+            if res.status_code in [200, 201]:
+                print(f"  [Ingest Success (Retry)] Posted to {endpoint}: {payload.get('service_name') or payload.get('queue_name') or payload.get('host_name')}")
+            else:
+                print(f"  ❌ [Ingest Failure] {endpoint} returned status {res.status_code}: {res.text}")
         else:
             print(f"  ❌ [Ingest Failure] {endpoint} returned status {res.status_code}: {res.text}")
     except Exception as e:
